@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>可調色動態光球 (啟動/暫停版)</title>
+    <style>
+        /*
+         * 基本樣式
+         */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+
+        /* 
+         * 使用 Flexbox 佈局，讓球體和控制器垂直排列，並在頁面中居中。
+         */
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 25px;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /*
+         * 球體的主要容器，採用響應式尺寸。
+         */
+        #sphere-container {
+            position: relative;
+            width: 90%; 
+            aspect-ratio: 1 / 1;
+            max-width: 500px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.1), rgba(100, 150, 255, 0.1) 50%, rgba(150, 50, 255, 0.2) 100%);
+            --glow-rgb: 100, 150, 255;
+            box-shadow: 0 0 20px rgba(var(--glow-rgb), 0.3), 0 0 40px rgba(var(--glow-rgb), 0.3), inset 0 0 15px rgba(255, 255, 255, 0.1);
+            animation: pulsate 5s ease-in-out infinite;
+        }
+
+        /*
+         * 增強後的呼吸效果關鍵幀。
+         */
+        @keyframes pulsate {
+            0% {
+                transform: scale(0.96);
+                box-shadow: 0 0 20px rgba(var(--glow-rgb), 0.3), 0 0 40px rgba(var(--glow-rgb), 0.3), inset 0 0 15px rgba(255, 255, 255, 0.1);
+            }
+            50% {
+                transform: scale(1);
+                box-shadow: 0 0 45px rgba(var(--glow-rgb), 0.7), 0 0 90px rgba(var(--glow-rgb), 0.7), inset 0 0 25px rgba(255, 255, 255, 0.2);
+            }
+            100% {
+                transform: scale(0.96);
+                box-shadow: 0 0 20px rgba(var(--glow-rgb), 0.3), 0 0 40px rgba(var(--glow-rgb), 0.3), inset 0 0 15px rgba(255, 255, 255, 0.1);
+            }
+        }
+
+        #particle-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+        }
+        
+        /*
+         * RGB 控制器的版面樣式。
+         */
+        #controls {
+            width: 90%;
+            max-width: 400px;
+            box-sizing: border-box;
+            background-color: rgba(25, 25, 25, 0.75);
+            padding: 15px 20px;
+            border-radius: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            color: white;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .slider-container label {
+            font-weight: bold;
+            width: 20px;
+        }
+        
+        .slider-container input[type="range"] {
+            -webkit-appearance: none;
+            flex-grow: 1;
+            height: 5px;
+            border-radius: 5px;   
+            background: #555;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+
+        .slider-container input[type="range"]:hover {
+            opacity: 1;
+        }
+
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%; 
+            background: #ddd;
+            cursor: pointer;
+        }
+
+        .slider-container input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #ddd;
+            cursor: pointer;
+        }
+
+        .slider-container span {
+            width: 30px;
+            text-align: right;
+        }
+        
+        /* === 修改：啟動/暫停按鈕樣式 === */
+        #toggleSpeedButton {
+            width: 90%;
+            max-width: 400px;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            background-color: #007bff; /* 預設藍色 */
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            margin-top: -5px;
+        }
+
+        #toggleSpeedButton:hover {
+            transform: scale(1.02);
+        }
+
+        /* === 新增：暫停狀態下的按鈕樣式 === */
+        #toggleSpeedButton.pause-mode {
+            background-color: #ff8c00; /* 橙色 */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sphere-container">
+        <canvas id="particle-canvas"></canvas>
+    </div>
+
+    <div id="controls">
+        <div class="slider-container">
+            <label for="red">R</label>
+            <input type="range" id="red" min="0" max="255" value="100">
+            <span id="red-value">100</span>
+        </div>
+        <div class="slider-container">
+            <label for="green">G</label>
+            <input type="range" id="green" min="0" max="255" value="150">
+            <span id="green-value">150</span>
+        </div>
+        <div class="slider-container">
+            <label for="blue">B</label>
+            <input type="range" id="blue" min="0" max="255" value="255">
+            <span id="blue-value">255</span>
+        </div>
+    </div>
+    
+    <!-- === 修改：按鈕 ID 和文字 === -->
+    <button id="toggleSpeedButton">啟 動</button>
+
+
+    <script>
+        // --- 獲取 DOM 元素 ---
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('sphere-container');
+        const sphereContainer = document.getElementById('sphere-container');
+
+        const redSlider = document.getElementById('red');
+        const greenSlider = document.getElementById('green');
+        const blueSlider = document.getElementById('blue');
+        const redValueSpan = document.getElementById('red-value');
+        const greenValueSpan = document.getElementById('green-value');
+        const blueValueSpan = document.getElementById('blue-value');
+        
+        // === 修改：獲取按鈕元素 ===
+        const toggleSpeedButton = document.getElementById('toggleSpeedButton');
+
+        // --- 全局變數 ---
+        let particlesArray = [];
+        let baseColor = {
+            r: parseInt(redSlider.value),
+            g: parseInt(greenSlider.value),
+            b: parseInt(blueSlider.value)
+        };
+        
+        // === 新增：定義速度常數和狀態變數 ===
+        const SLOW_SPEED_MULTIPLIER = 1 / 3;
+        const FAST_SPEED_MULTIPLIER = 2;
+        let speedMultiplier = SLOW_SPEED_MULTIPLIER; // 初始為慢速
+        let isFastModeActive = false; // 初始為非高速模式
+
+
+        // --- 粒子類別 (Particle Class) ---
+        class Particle {
+            constructor(x, y, size, color, speedX, speedY) {
+                this.x = x;
+                this.y = y;
+                this.size = size;
+                this.color = color;
+                this.speedX = speedX;
+                this.speedY = speedY;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2, false);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = Math.max(1, this.size / 4);
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            update() {
+                const diameter = Math.min(canvas.width, canvas.height);
+                const radius = diameter / 2;
+                const dist = Math.sqrt(Math.pow(this.x - radius, 2) + Math.pow(this.y - radius, 2));
+
+                if (dist + this.size > radius) {
+                    const normalX = (this.x - radius) / dist;
+                    const normalY = (this.y - radius) / dist;
+                    const dotProduct = this.speedX * normalX + this.speedY * normalY;
+                    this.speedX -= 2 * dotProduct * normalX;
+                    this.speedY -= 2 * dotProduct * normalY;
+                }
+
+                this.x += this.speedX * speedMultiplier;
+                this.y += this.speedY * speedMultiplier;
+                this.draw();
+            }
+        }
+
+        // --- 核心功能函數 ---
+        function init() {
+            const size = container.clientWidth;
+            canvas.width = size;
+            canvas.height = size;
+            const radius = size / 2;
+
+            particlesArray = [];
+            const numberOfParticles = 80;
+            for (let i = 0; i < numberOfParticles; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const r = Math.random() * radius * 0.9;
+                const x = Math.cos(angle) * r + radius;
+                const y = Math.sin(angle) * r + radius;
+                const particleSize = Math.random() * 10 + 4; 
+                // === 修改：基礎速度稍微提升，讓快慢速差異更明顯 ===
+                const speedX = (Math.random() - 0.5) * 1.2;
+                const speedY = (Math.random() - 0.5) * 1.2;
+
+                const r_offset = (Math.random() - 0.5) * 60;
+                const g_offset = (Math.random() - 0.5) * 60;
+                const b_offset = (Math.random() - 0.5) * 60;
+
+                const particleR = Math.max(0, Math.min(255, baseColor.r + r_offset));
+                const particleG = Math.max(0, Math.min(255, baseColor.g + g_offset));
+                const particleB = Math.max(0, Math.min(255, baseColor.b + b_offset));
+                
+                const color = `rgba(${particleR}, ${particleG}, ${particleB}, 0.8)`;
+
+                particlesArray.push(new Particle(x, y, particleSize, color, speedX, speedY));
+            }
+        }
+
+        function animate() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (particlesArray.length > 0) {
+                particlesArray.forEach(particle => {
+                    particle.update();
+                });
+            }
+            
+            requestAnimationFrame(animate);
+        }
+
+        // --- 事件監聽器與處理函數 ---
+        function handleColorChange() {
+            baseColor.r = parseInt(redSlider.value);
+            baseColor.g = parseInt(greenSlider.value);
+            baseColor.b = parseInt(blueSlider.value);
+            
+            redValueSpan.textContent = baseColor.r;
+            greenValueSpan.textContent = baseColor.g;
+            blueValueSpan.textContent = baseColor.b;
+
+            const newGlowRgb = `${baseColor.r}, ${baseColor.g}, ${baseColor.b}`;
+            sphereContainer.style.setProperty('--glow-rgb', newGlowRgb);
+            
+            init();
+        }
+
+        redSlider.addEventListener('input', handleColorChange);
+        greenSlider.addEventListener('input', handleColorChange);
+        blueSlider.addEventListener('input', handleColorChange);
+
+        // === 修改：切換按鈕的事件監聽 ===
+        toggleSpeedButton.addEventListener('click', () => {
+            // 切換高速模式的狀態
+            isFastModeActive = !isFastModeActive;
+
+            if (isFastModeActive) {
+                // 進入高速模式
+                speedMultiplier = FAST_SPEED_MULTIPLIER;
+                toggleSpeedButton.textContent = '暫 停';
+                toggleSpeedButton.classList.add('pause-mode');
+            } else {
+                // 回到慢速模式
+                speedMultiplier = SLOW_SPEED_MULTIPLIER;
+                toggleSpeedButton.textContent = '啟 動';
+                toggleSpeedButton.classList.remove('pause-mode');
+            }
+        });
+
+        // 使用 ResizeObserver 處理容器尺寸變化
+        new ResizeObserver(() => {
+            init();
+        }).observe(container);
+
+        // --- 初始設置與啟動 ---
+        handleColorChange();
+        animate();
+
+    </script>
+</body>
+</html>
